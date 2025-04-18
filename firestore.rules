@@ -1,0 +1,72 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Fonctions utilitaires
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function hasRole(role) {
+      return isAuthenticated() && 
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == role;
+    }
+
+    function isResponsableProduction() {
+      return hasRole('responsable_production');
+    }
+
+    // Collection users
+    match /users/{userId} {
+      // Allow read and write to their own document during account creation
+      allow create: if request.auth != null && request.auth.uid == userId;
+      allow read: if request.auth != null && (request.auth.uid == userId || isResponsableProduction());
+      allow update: if request.auth != null && (request.auth.uid == userId || isResponsableProduction());
+      allow delete: if isResponsableProduction();
+    }
+
+    // Collection lots
+    match /lots/{lotId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated() && (hasRole('production') || isResponsableProduction());
+      allow update: if isAuthenticated() && (hasRole('production') || isResponsableProduction());
+      allow delete: if isResponsableProduction();
+    }
+
+    // Collection produits
+    match /produits/{produitId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated() && (
+        hasRole('production') || 
+        hasRole('moulage') || 
+        hasRole('deco') || 
+        hasRole('emballage') || 
+        isResponsableProduction()
+      );
+      allow update: if isAuthenticated() && (
+        hasRole('production') || 
+        hasRole('moulage') || 
+        hasRole('deco') || 
+        hasRole('emballage') || 
+        isResponsableProduction()
+      );
+      allow delete: if isResponsableProduction();
+    }
+
+    // Collection journaux
+    match /journaux/{journalId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated();
+      allow update: if isResponsableProduction();
+      allow delete: if isResponsableProduction();
+    }
+
+    // Collection livraisons
+    match /livraisons/{livraisonId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated() && (hasRole('chauffeur') || isResponsableProduction());
+      allow update: if isAuthenticated() && (hasRole('chauffeur') || isResponsableProduction());
+      allow delete: if isResponsableProduction();
+    }
+  }
+}
